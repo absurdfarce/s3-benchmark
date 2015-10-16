@@ -38,10 +38,12 @@
   "Generates a file of random bytes. The size of the file is controlled by specifying the chunk-size
   to write in a single pass and the num-chunks to write (this means total size is chunk-size * num-chunks).
   The file will be truncated before writing the random data."
-  [file chunk-size num-chunks]
-  (with-open [file-output-stream (io/output-stream file)]
-    (dotimes [_ num-chunks]
-      (write-random-bytes! file-output-stream chunk-size))))
+  [chunk-size num-chunks]
+  (let [file (java.io.File/createTempFile (random-uuid-string) ".dat")]
+    (with-open [file-output-stream (io/output-stream file)]
+      (dotimes [_ num-chunks]
+        (write-random-bytes! file-output-stream chunk-size)))
+    file))
 
 
 (defn compute-crc32

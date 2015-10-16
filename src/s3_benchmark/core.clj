@@ -17,7 +17,7 @@
         {:name 'upload' :wall-time 0 :free-mem-delta 0 :total-mem-delta 0}
         {...}]
     }"
-  (let [local-tmp-file (java.io.File/createTempFile (util/random-uuid-string) ".dat")
+  (let [local-tmp-file (util/generate-file chunk-size chunk-count)
         tmpdir (java.io.File. (System/getProperty "java.io.tmpdir") (util/random-uuid-string)) ;; unique place to download
         downloaded-file (java.io.File. tmpdir (.getName local-tmp-file))
         test-data (transient {:timestamp (format/unparse (format/formatters :rfc822) (time/now))
@@ -26,7 +26,6 @@
                                           :size (.length local-tmp-file)}})]
     (try
       (do
-        (util/generate-file local-tmp-file chunk-size chunk-count)
         (assoc! test-data
                 :transfers
                 (-> []
@@ -36,12 +35,11 @@
         (.delete downloaded-file)
         (.delete local-tmp-file)
         (assoc! test-data :result "success" :exception nil))
-      (catch Throwable ex (assoc! test-data :result "error" :exception ex)))
+      (catch Throwable ex (assoc! test-data :result "error" :exception (.getMessage ex))))
     (persistent! test-data)))
 
 
 (defn- multiple-file-test
-  ""
   [test-runs test-params]
   (for [i (range test-runs)]
     (do
@@ -52,7 +50,7 @@
 
 (defn build-test-executor
   "Usage:   (run-build-test-executor test-fn & test-fn-args)
-   Example: ((run-build-test-executor single-file-test {...}) '~/single-test-run.edn')
+   Example: ((run-build-test-executor single-file-test {...}) 'single-test-run.edn')
 
   Returns a function that when invoked with a result-file will execute test-fn with test-fn-args
   and write any resulting data structure returned to the result-file in EDN format. This allows
