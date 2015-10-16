@@ -33,6 +33,8 @@
                     (util/record "upload" #(upload-fn creds bucket local-tmp-file))
                     (util/record "download" #(download-fn creds bucket local-tmp-file tmpdir))))
         (util/verify-files-match local-tmp-file downloaded-file)
+        (.delete downloaded-file)
+        (.delete local-tmp-file)
         (assoc! test-data :result "success" :exception nil))
       (catch Throwable ex (assoc! test-data :result "error" :exception ex)))
     (persistent! test-data)))
