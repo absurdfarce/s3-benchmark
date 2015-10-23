@@ -27,13 +27,13 @@
                               :test-file {:name (.getName local-tmp-file)
                                           :size (.length local-tmp-file)}}
         transfers
-                (-> []
-                    (util/record "upload" #(upload-fn creds bucket local-tmp-file))
-                    (util/record "download" #(download-fn creds bucket local-tmp-file tmpdir)))]
-        (util/verify-files-match local-tmp-file downloaded-file)
-        (.delete downloaded-file)
-        (.delete local-tmp-file)
-        (assoc test-data :transfers transfers)))
+        (-> []
+            (util/record "upload" #(upload-fn creds bucket local-tmp-file))
+            (util/record "download" #(download-fn creds bucket local-tmp-file tmpdir)))]
+    (util/verify-files-match local-tmp-file downloaded-file)
+    (.delete downloaded-file)
+    (.delete local-tmp-file)
+    (assoc test-data :transfers transfers)))
 
 (defn- multiple-file-test
   [test-runs test-params]
@@ -151,11 +151,11 @@
                                                                                             :upload-fn   jclouds/upload-file
                                                                                             :download-fn jclouds/download-file})
                              :single-really-small-file (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                       :bucket      conf/default-bucket
-                                                                                       :chunk-size  256
-                                                                                       :chunk-count 40
-                                                                                       :upload-fn   jclouds/upload-file
-                                                                                       :download-fn jclouds/download-file})
+                                                                                              :bucket      conf/default-bucket
+                                                                                              :chunk-size  256
+                                                                                              :chunk-count 40
+                                                                                              :upload-fn   jclouds/upload-file
+                                                                                              :download-fn jclouds/download-file})
                              :single-small-file (build-test-executor single-file-test {:creds       conf/default-creds
                                                                                        :bucket      conf/default-bucket
                                                                                        :chunk-size  (util/random-long 256 512)
@@ -186,8 +186,8 @@
         results (test-fn)
         download-data (analyze/transform-download-data results)
         download-speed (analyze/compute-download-speed download-data)]
-     (println "Raw results: " results)
-     (println "Download data: " download-data)
-     (println "Download speed: " download-speed)
+    (println "Raw results: " results)
+    (println "Download data: " download-data)
+    (println "Download speed: " download-speed)
     download-speed))
 
