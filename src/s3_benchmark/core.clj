@@ -43,151 +43,52 @@
       (Thread/sleep (util/random-long 10000 90000))
       (single-file-test test-params))))
 
-(defn build-test-executor
-  "Usage:   (run-build-test-executor test-fn & test-fn-args)
-   Example: ((run-build-test-executor single-file-test {...}) 'single-test-run.edn')
+(def auth-params {:creds  conf/default-creds
+                  :bucket conf/default-bucket})
 
-  Returns a function that when invoked with a result-file will execute test-fn with test-fn-args
-  and write any resulting data structure returned to the result-file in EDN format. This allows
-  for the definition of a number of repeatable test cases that save the results to disk for further
-  analysis."
-  [test-fn & test-fn-args]
-  (fn [] (apply test-fn test-fn-args)))
+(def amazonica-params {:upload-fn   amazonica/upload-file
+                       :download-fn amazonica/download-file})
+
+(def amazonica-nio-params {:upload-fn   amazonica/upload-file-nio
+                           :download-fn amazonica/download-file-nio})
+
+(def jclouds-params {:upload-fn   jclouds/upload-file
+                          :download-fn jclouds/download-file})
 
 ;; Chunk Size / Chunk Count Table
-;;
 ;;                                      chunk-size      chunk-count
 ;; small files    => 256K to 10MB       256 - 512       1000 - 19532
 ;; large files    => 50MB to 200MB      1024 - 2048     48829 - 97657
 ;; huge files     => 500MB to 1GB       4096 - 8192     122071 - 122071
-(def test-cases {:amazonica {:small-files           (build-test-executor multiple-file-test 25 {:creds       conf/default-creds
-                                                                                                :bucket      conf/default-bucket
-                                                                                                :chunk-size  (util/random-long 256 512)
-                                                                                                :chunk-count (util/random-long 1000 19532)
-                                                                                                :upload-fn   amazonica/upload-file
-                                                                                                :download-fn amazonica/download-file})
-                             :large-files           (build-test-executor multiple-file-test 25 {:creds       conf/default-creds
-                                                                                                :bucket      conf/default-bucket
-                                                                                                :chunk-size  (util/random-long 1024 2048)
-                                                                                                :chunk-count (util/random-long 48829 97657)
-                                                                                                :upload-fn   amazonica/upload-file
-                                                                                                :download-fn amazonica/download-file})
-                             :huge-files            (build-test-executor multiple-file-test 25 {:creds       conf/default-creds
-                                                                                                :bucket      conf/default-bucket
-                                                                                                :chunk-size  (util/random-long 4096 8192)
-                                                                                                :chunk-count 122071
-                                                                                                :upload-fn   amazonica/upload-file
-                                                                                                :download-fn amazonica/download-file})
-                             :single-small-file     (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                           :bucket      conf/default-bucket
-                                                                                           :chunk-size  (util/random-long 256 512)
-                                                                                           :chunk-count (util/random-long 1000 19532)
-                                                                                           :upload-fn   amazonica/upload-file
-                                                                                           :download-fn amazonica/download-file})
-                             :single-large-file     (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                           :bucket      conf/default-bucket
-                                                                                           :chunk-size  (util/random-long 1024 2048)
-                                                                                           :chunk-count (util/random-long 48829 97657)
-                                                                                           :upload-fn   amazonica/upload-file
-                                                                                           :download-fn amazonica/download-file})
-                             :single-huge-file      (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                           :bucket      conf/default-bucket
-                                                                                           :chunk-size  (util/random-long 4096 8192)
-                                                                                           :chunk-count 122071
-                                                                                           :upload-fn   amazonica/upload-file
-                                                                                           :download-fn amazonica/download-file})
-                             :nio-small-files       (build-test-executor multiple-file-test 25 {:creds       conf/default-creds
-                                                                                                :bucket      conf/default-bucket
-                                                                                                :chunk-size  (util/random-long 256 512)
-                                                                                                :chunk-count (util/random-long 1000 19532)
-                                                                                                :upload-fn   amazonica/upload-file-nio
-                                                                                                :download-fn amazonica/download-file-nio})
-                             :nio-large-files       (build-test-executor multiple-file-test 25 {:creds       conf/default-creds
-                                                                                                :bucket      conf/default-bucket
-                                                                                                :chunk-size  (util/random-long 1024 2048)
-                                                                                                :chunk-count (util/random-long 48829 97657)
-                                                                                                :upload-fn   amazonica/upload-file-nio
-                                                                                                :download-fn amazonica/download-file-nio})
-                             :nio-huge-files        (build-test-executor multiple-file-test 25 {:creds       conf/default-creds
-                                                                                                :bucket      conf/default-bucket
-                                                                                                :chunk-size  (util/random-long 4096 8192)
-                                                                                                :chunk-count 122071
-                                                                                                :upload-fn   amazonica/upload-file-nio
-                                                                                                :download-fn amazonica/download-file-nio})
-                             :nio-single-small-file (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                           :bucket      conf/default-bucket
-                                                                                           :chunk-size  (util/random-long 256 512)
-                                                                                           :chunk-count (util/random-long 1000 19532)
-                                                                                           :upload-fn   amazonica/upload-file-nio
-                                                                                           :download-fn amazonica/download-file-nio})
-                             :nio-single-large-file (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                           :bucket      conf/default-bucket
-                                                                                           :chunk-size  (util/random-long 1024 2048)
-                                                                                           :chunk-count (util/random-long 48829 97657)
-                                                                                           :upload-fn   amazonica/upload-file-nio
-                                                                                           :download-fn amazonica/download-file-nio})
-                             :nio-single-huge-file  (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                           :bucket      conf/default-bucket
-                                                                                           :chunk-size  (util/random-long 4096 8192)
-                                                                                           :chunk-count 122071
-                                                                                           :upload-fn   amazonica/upload-file-nio
-                                                                                           :download-fn amazonica/download-file-nio})}
-                 :jclouds   {:small-files       (build-test-executor multiple-file-test 25 {:creds       conf/default-creds
-                                                                                            :bucket      conf/default-bucket
-                                                                                            :chunk-size  (util/random-long 256 512)
-                                                                                            :chunk-count (util/random-long 1000 19532)
-                                                                                            :upload-fn   jclouds/upload-file
-                                                                                            :download-fn jclouds/download-file})
-                             :large-files       (build-test-executor multiple-file-test 25 {:creds       conf/default-creds
-                                                                                            :bucket      conf/default-bucket
-                                                                                            :chunk-size  (util/random-long 1024 2048)
-                                                                                            :chunk-count (util/random-long 48829 97657)
-                                                                                            :upload-fn   jclouds/upload-file
-                                                                                            :download-fn jclouds/download-file})
-                             :huge-files        (build-test-executor multiple-file-test 25 {:creds       conf/default-creds
-                                                                                            :bucket      conf/default-bucket
-                                                                                            :chunk-size  (util/random-long 4096 8192)
-                                                                                            :chunk-count 122071
-                                                                                            :upload-fn   jclouds/upload-file
-                                                                                            :download-fn jclouds/download-file})
-                             :single-really-small-file (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                              :bucket      conf/default-bucket
-                                                                                              :chunk-size  256
-                                                                                              :chunk-count 40
-                                                                                              :upload-fn   jclouds/upload-file
-                                                                                              :download-fn jclouds/download-file})
-                             :single-small-file (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                       :bucket      conf/default-bucket
-                                                                                       :chunk-size  (util/random-long 256 512)
-                                                                                       :chunk-count (util/random-long 1000 19532)
-                                                                                       :upload-fn   jclouds/upload-file
-                                                                                       :download-fn jclouds/download-file})
-                             :single-large-file (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                       :bucket      conf/default-bucket
-                                                                                       :chunk-size  (util/random-long 1024 2048)
-                                                                                       :chunk-count (util/random-long 48829 97657)
-                                                                                       :upload-fn   jclouds/upload-file
-                                                                                       :download-fn jclouds/download-file})
-                             :single-huge-file  (build-test-executor single-file-test {:creds       conf/default-creds
-                                                                                       :bucket      conf/default-bucket
-                                                                                       :chunk-size  (util/random-long 4096 8192)
-                                                                                       :chunk-count 122071
-                                                                                       :upload-fn   jclouds/upload-file
-                                                                                       :download-fn jclouds/download-file})}})
+(def small-files-params {:chunk-size  (util/random-long 256 512)
+                         :chunk-count (util/random-long 1000 19532)})
 
-(defn run
+(def large-files-params {:chunk-size  (util/random-long 1024 2048)
+                         :chunk-count (util/random-long 48829 97657)})
+
+(def huge-files-params {:chunk-size  (util/random-long 4096 8192)
+                        :chunk-count 122071})
+
+(defn run-test
   "REPL function that runs a particular test that was defined with a library type and test case name from the
   global map. The resulting data structure is then written out with a generated filename to the configured
   report directory."
-  [lib-type test-case]
-  (let [test-fn (-> test-cases
-                    (get lib-type)
-                    (get test-case))
-        results (test-fn)
+  [lib-type test-size & [num-files]]
+  (let [lib-params (cond (= lib-type :amazonica) amazonica-params
+                         (= lib-type :amazonica-nio) amazonica-nio-params
+                         (= lib-type :jclouds) jclouds-params)
+        size-params (cond (= test-size :small) small-files-params
+                        (= test-size :large) large-files-params
+                        (= test-size :huge) huge-files-params
+                        (= test-size :really-small) {:chunk-size 256 :chunk-count 40})
+        params (merge auth-params lib-params size-params)
+        file-count (or num-files 1)
+        results (if (> file-count 1)
+                  (apply multiple-file-test [file-count params])
+                  (apply single-file-test [params]))
         download-data (analyze/transform-download-data results)
         download-speed (analyze/compute-download-speed download-data)]
     (println "Raw results: " results)
     (println "Download data: " download-data)
     (println "Download speed: " download-speed)
     download-speed))
-
