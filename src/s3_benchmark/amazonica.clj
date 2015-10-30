@@ -27,26 +27,24 @@
 
 
 (defn download-file
-  [credentials bucket file dest-dir]
-  (let [file-obj (io/as-file file)
-        dest-dir-obj (io/as-file dest-dir)
+  [credentials bucket key dest-dir]
+  (let [dest-dir-obj (io/as-file dest-dir)
         s3-object (get-object credentials :bucket-name bucket
-                                          :key (.getName file-obj))]
+                                          :key key)]
     (util/ensure-dir-exists dest-dir-obj)
     (with-open [s3-object-stream (:object-content s3-object)]
       (io/copy s3-object-stream
-               (java.io.File. dest-dir (.getName file-obj))))))
+               (java.io.File. dest-dir key)))))
 
 
 (defn download-file-nio
-  [credentials bucket file dest-dir]
-  (let [s3-filename (.getName (io/as-file file))
-        dest-dir-obj (io/as-file dest-dir)
-        dest-file-path (.toPath (java.io.File. dest-dir-obj s3-filename))
+  [credentials bucket key dest-dir]
+  (let [dest-dir-obj (io/as-file dest-dir)
+        dest-file-path (.toPath (java.io.File. dest-dir-obj key))
         copy-option-array (make-array java.nio.file.CopyOption 1)
         _ (aset copy-option-array 0 java.nio.file.StandardCopyOption/REPLACE_EXISTING)
         s3-object (get-object credentials :bucket-name bucket
-                                          :key s3-filename)]
+                                          :key key)]
     (util/ensure-dir-exists dest-dir-obj)
     (with-open [s3-object-stream (:object-content s3-object)]
       (java.nio.file.Files/copy s3-object-stream dest-file-path copy-option-array))))

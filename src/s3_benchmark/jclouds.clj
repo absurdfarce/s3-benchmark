@@ -4,7 +4,6 @@
             [s3-benchmark.util :as util])
   (:import [com.google.common.net MediaType]))
 
-
 (defn upload-file
   [credentials bucket file]
   (let [file-obj (io/as-file file)
@@ -18,11 +17,10 @@
                                             :content-length (.length file-obj))))))
 
 (defn download-file
-  [credentials bucket file dest-dir]
-  (let [file-obj (io/as-file file)
-        dest-dir-obj (io/as-file dest-dir)
+  [credentials bucket key dest-dir]
+  (let [dest-dir-obj (io/as-file dest-dir)
         aws-blobstore (blobstore2/blobstore "aws-s3" (:access-key credentials) (:secret-key credentials))]
     (util/ensure-dir-exists dest-dir-obj)
-    (with-open [s3-object-stream (blobstore2/get-blob-stream aws-blobstore bucket (.getName file-obj))]
+    (with-open [s3-object-stream (blobstore2/get-blob-stream aws-blobstore bucket key)]
       (io/copy s3-object-stream
-               (java.io.File. dest-dir (.getName file-obj))))))
+               (java.io.File. dest-dir key)))))

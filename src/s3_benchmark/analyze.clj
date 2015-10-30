@@ -2,7 +2,6 @@
   (:require [clojure.java.io :as io]
             [s3-benchmark.conf :as conf]))
 
-
 (defn ms->s [ms] (/ ms 1000M))
 (defn bytes->MB [bytes] (/ bytes 1000000M))
 
@@ -24,6 +23,7 @@
 (defn compute-download-speed
   [result]
   (let [{:keys [file-size wall-time]} result]
+    (print "wall-time: " wall-time ", file-size: " file-size)
     (assoc result :MB-per-sec
                   (with-precision 5 (/ (bytes->MB file-size) (ms->s wall-time))))))
 

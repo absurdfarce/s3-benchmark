@@ -1,8 +1,9 @@
 (ns s3-benchmark.util
   "Collection of helper functions used to make writing the test cases and benchmarking code."
   (:require [clojure.java.io :as io]
+            [clojure.data.generators :as generators]
             [clojure.string :as string]
-            [clojure.data.generators :as generators])
+            [clojure.tools.logging :as log])
   (:import [java.util.zip CRC32]))
 
 
@@ -80,27 +81,22 @@
 
 
 (defn record
-  "Usages:  (record transfers name test-fn)
-   Example: (-> []
-                (record 'step 1' #(...))
-                (record 'step 2' #(...)))
-
-  The record function executes the test-fn after capturing the wall time and some basic JVM memory
+  "The record function executes the test-fn after capturing the wall time and some basic JVM memory
   stats and then computes the delta of these stats after the function executes. These stats are
   wrapped up in a map and then the map is added to the transfers vector."
-  [transfers name test-fn]
-  (let [test-result (atom {:name name})
-        start-time (System/currentTimeMillis)
+  [name test-fn params]
+  (let [start-time (System/currentTimeMillis)
         start-free-mem (.freeMemory (Runtime/getRuntime))
         start-total-mem (.totalMemory (Runtime/getRuntime))]
     (try
-      (test-fn)
-      (finally
-        (swap! test-result assoc :wall-time (- (System/currentTimeMillis) start-time)
-               :free-mem-delta (- (.freeMemory (Runtime/getRuntime)) start-free-mem)
-               :total-mem-delta (- (.totalMemory (Runtime/getRuntime)) start-total-mem))))
-    (conj transfers @test-result)))
-
+      (apply test-fn params)
+      {:name name
+       :wall-time (- (System/currentTimeMillis) start-time)
+       :free-mem-delta (- (.freeMemory (Runtime/getRuntime)) start-free-mem)
+       :total-mem-delta (- (.totalMemory (Runtime/getRuntime)) start-total-mem)}
+      (catch Exception e
+        (log/info "Exception in test function " e)
+        nil))))
 
 (defn keyword->filename
   "Converts a keyword into a name suitable for embedding in a filename. In addition to using the name

@@ -5,10 +5,11 @@
             [s3-benchmark.analyze :as analyze]
             [s3-benchmark.conf :as conf]
             [s3-benchmark.amazonica :as amazonica]
+            [s3-benchmark.httpclient :as httpclient]
             [s3-benchmark.jclouds :as jclouds]
             [s3-benchmark.util :as util]))
 
-(defn- single-file-test [{:keys [creds, bucket, chunk-size, chunk-count, upload-fn, download-fn] :as test-params}]
+(defn- single-file-test [{:keys [creds bucket chunk-size chunk-count upload-fn download-fn] :as test-params}]
   " {
       :timestamp 2015-10-03 09:12:22 CDT
       :result 'success'
@@ -26,10 +27,10 @@
                               :params (dissoc test-params :creds :upload-fn :download-fn)
                               :test-file {:name (.getName local-tmp-file)
                                           :size (.length local-tmp-file)}}
-        transfers
-        (-> []
-            (util/record "upload" #(upload-fn creds bucket local-tmp-file))
-            (util/record "download" #(download-fn creds bucket local-tmp-file tmpdir)))]
+        transfers [(when upload-fn
+                     (util/record "upload" upload-fn [creds bucket local-tmp-file]))
+                   (when download-fn
+                     (util/record "download" download-fn [creds bucket (.getName local-tmp-file) tmpdir]))]]
     (util/verify-files-match local-tmp-file downloaded-file)
     (.delete downloaded-file)
     (.delete local-tmp-file)
@@ -43,45 +44,25 @@
       (Thread/sleep (util/random-long 10000 90000))
       (single-file-test test-params))))
 
-(def auth-params {:creds  conf/default-creds
-                  :bucket conf/default-bucket})
-
-(def amazonica-params {:upload-fn   amazonica/upload-file
-                       :download-fn amazonica/download-file})
-
-(def amazonica-nio-params {:upload-fn   amazonica/upload-file-nio
-                           :download-fn amazonica/download-file-nio})
-
-(def jclouds-params {:upload-fn   jclouds/upload-file
-                          :download-fn jclouds/download-file})
-
-;; Chunk Size / Chunk Count Table
-;;                                      chunk-size      chunk-count
-;; small files    => 256K to 10MB       256 - 512       1000 - 19532
-;; large files    => 50MB to 200MB      1024 - 2048     48829 - 97657
-;; huge files     => 500MB to 1GB       4096 - 8192     122071 - 122071
-(def small-files-params {:chunk-size  (util/random-long 256 512)
-                         :chunk-count (util/random-long 1000 19532)})
-
-(def large-files-params {:chunk-size  (util/random-long 1024 2048)
-                         :chunk-count (util/random-long 48829 97657)})
-
-(def huge-files-params {:chunk-size  (util/random-long 4096 8192)
-                        :chunk-count 122071})
-
 (defn run-test
   "REPL function that runs a particular test that was defined with a library type and test case name from the
   global map. The resulting data structure is then written out with a generated filename to the configured
   report directory."
   [lib-type test-size & [num-files]]
-  (let [lib-params (cond (= lib-type :amazonica) amazonica-params
-                         (= lib-type :amazonica-nio) amazonica-nio-params
-                         (= lib-type :jclouds) jclouds-params)
-        size-params (cond (= test-size :small) small-files-params
-                        (= test-size :large) large-files-params
-                        (= test-size :huge) huge-files-params
+  (let [lib-params (cond (= lib-type :amazonica) {:upload-fn amazonica/upload-file :download-fn amazonica/download-file}
+                         (= lib-type :amazonica-nio) {:upload-fn amazonica/upload-file-nio :download-fn amazonica/download-file-nio}
+                         (= lib-type :jclouds) {:upload-fn jclouds/upload-file :download-fn jclouds/download-file}
+                         (= lib-type :httpclient) {:upload-fn httpclient/upload-file :download-fn httpclient/download-file}) 
+        ;; Chunk Size / Chunk Count Table
+        ;;                                      chunk-size      chunk-count
+        ;; small files    => 256K to 10MB       256 - 512       1000 - 19532
+        ;; large files    => 50MB to 200MB      1024 - 2048     48829 - 97657
+        ;; huge files     => 500MB to 1GB       4096 - 8192     122071 - 122071
+        size-params (cond (= test-size :small) {:chunk-size  (util/random-long 256 512) :chunk-count (util/random-long 1000 19532)}
+                        (= test-size :large) {:chunk-size  (util/random-long 1024 2048) :chunk-count (util/random-long 48829 97657)}
+                        (= test-size :huge) {:chunk-size  (util/random-long 4096 8192) :chunk-count 122071}
                         (= test-size :really-small) {:chunk-size 256 :chunk-count 40})
-        params (merge auth-params lib-params size-params)
+        params (merge {:creds conf/default-creds :bucket conf/default-bucket} lib-params size-params)
         file-count (or num-files 1)
         results (if (> file-count 1)
                   (apply multiple-file-test [file-count params])
