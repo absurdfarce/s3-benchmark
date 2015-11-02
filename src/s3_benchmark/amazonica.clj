@@ -3,7 +3,6 @@
   (:require [clojure.java.io :as io]
             [s3-benchmark.util :as util]))
 
-
 (defn upload-file
   [credentials bucket file]
   (let [file-obj (io/as-file file)]
@@ -12,7 +11,6 @@
                               :key (.getName file-obj)
                               :metadata {:content-length (.length file-obj)}
                               :input-stream file-content))))
-
 
 (defn upload-file-nio
   [credentials bucket file]
@@ -25,28 +23,20 @@
                               :metadata {:content-length (java.nio.file.Files/size path-obj)}
                               :input-stream file-content))))
 
-
 (defn download-file
-  [credentials bucket key dest-dir]
-  (let [dest-dir-obj (io/as-file dest-dir)
-        s3-object (get-object credentials :bucket-name bucket
-                                          :key key)]
-    (util/ensure-dir-exists dest-dir-obj)
+  [credentials bucket k dest-dir]
+  (let [s3-object (get-object credentials :bucket-name bucket :key k)]
+    (util/ensure-dir-exists dest-dir)
     (with-open [s3-object-stream (:object-content s3-object)]
       (io/copy s3-object-stream
-               (java.io.File. dest-dir key)))))
-
+               (io/file dest-dir k)))))
 
 (defn download-file-nio
-  [credentials bucket key dest-dir]
-  (let [dest-dir-obj (io/as-file dest-dir)
-        dest-file-path (.toPath (java.io.File. dest-dir-obj key))
+  [credentials bucket k dest-dir]
+  (let [dest-file-path (.toPath (io/file dest-dir k))
         copy-option-array (make-array java.nio.file.CopyOption 1)
         _ (aset copy-option-array 0 java.nio.file.StandardCopyOption/REPLACE_EXISTING)
-        s3-object (get-object credentials :bucket-name bucket
-                                          :key key)]
-    (util/ensure-dir-exists dest-dir-obj)
+        s3-object (get-object credentials :bucket-name bucket :key k)]
+    (util/ensure-dir-exists dest-dir)
     (with-open [s3-object-stream (:object-content s3-object)]
       (java.nio.file.Files/copy s3-object-stream dest-file-path copy-option-array))))
-
-
