@@ -1,0 +1,19 @@
+#!/bin/sh
+
+# Adapted from http://tmont.com/blargh/2014/1/uploading-to-s3-in-bash because I'm lazy.  Presumes
+# the same set of environment variables used by s3-benchmark.
+
+key=$1
+bucket=$2
+resource="/${bucket}/${key}"
+dateValue=`date +'%a, %d %b %Y %H:%M:%S %z'`
+stringToSign="GET
+
+
+${dateValue}
+${resource}"
+signature=`/bin/echo -n "$stringToSign" | openssl sha1 -hmac ${AWS_SECRET_KEY} -binary | base64`
+curl -H "Host: ${bucket}.s3.amazonaws.com" \
+  -H "Date: ${dateValue}" \
+  -H "Authorization: AWS ${AWS_ACCESS_KEY}:${signature}" \
+  https://${bucket}.s3.amazonaws.com/${key} > /dev/null
