@@ -109,3 +109,12 @@
         upload-stage (composed-upload-stage params)
         download-stage (composed-download-stage params)]
     (apply (comp download-stage upload-stage) [{}])))
+
+(defn download-test
+  "REPL function that runs a complete upload + download test"
+  [lib-type test-size k]
+  (let [lib-params (build-lib-params lib-type) 
+        size-params (build-size-params test-size)
+        params (merge {:creds conf/default-creds :bucket conf/default-bucket} lib-params size-params)]
+    (apply (composed-download-stage params) [{:key k}])))
+

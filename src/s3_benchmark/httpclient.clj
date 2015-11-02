@@ -8,8 +8,7 @@
             [org.apache.http HttpHeaders]
             [org.apache.http.client.methods HttpGet HttpPut]
             [org.apache.http.entity InputStreamEntity]
-            [org.apache.http.impl.client HttpClients]
-           ))
+            [org.apache.http.impl.client HttpClients]))
 
 (def client (HttpClients/createDefault))
 
@@ -28,7 +27,10 @@
           (log/info "Response from Amazon (upload): " (.getStatusLine resp)))))))
 
 (defn download-file
-  [credentials bucket key dest-dir]
-  (let [req (HttpGet. (format "http://%s.s3.amazonaws.com/%s" bucket key))]
+  [credentials bucket k dest-dir]
+  (let [req (HttpGet. (format "http://%s.s3.amazonaws.com/%s" bucket k))]
     (with-open [resp (.execute client req)]
-      (log/info "Response from Amazon (download): " (.getStatusLine resp)))))
+      (let [entity-stream (-> resp
+                              (.getEntity)
+                              (.getContent))]
+        (io/copy entity-stream (io/file dest-dir k))))))

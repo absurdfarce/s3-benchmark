@@ -28,8 +28,7 @@
   (let [s3-object (get-object credentials :bucket-name bucket :key k)]
     (util/ensure-dir-exists dest-dir)
     (with-open [s3-object-stream (:object-content s3-object)]
-      (io/copy s3-object-stream
-               (io/file dest-dir k)))))
+      (io/copy s3-object-stream (io/file dest-dir k)))))
 
 (defn download-file-nio
   [credentials bucket k dest-dir]
