@@ -6,6 +6,9 @@
             [clojure.tools.logging :as log])
   (:import [java.util.zip CRC32]))
 
+(defn ms->s [ms] (/ ms 1000M))
+(defn bytes->MB [bytes] (/ bytes 1000000M))
+
 (defn random-long
   "Usage:   (random-long lower-bound upper-bound)
    Example: (random-long 10 20)

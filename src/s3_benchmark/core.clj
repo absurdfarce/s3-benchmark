@@ -3,13 +3,46 @@
             [clojure.tools.logging :as log]
             [clj-time.core :as time]
             [clj-time.format :as format]
-            [s3-benchmark.analyze :as analyze]
             [s3-benchmark.conf :as conf]
             [s3-benchmark.amazonica :as amazonica]
             [s3-benchmark.httpclient :as httpclient]
             [s3-benchmark.jclouds :as jclouds]
             [s3-benchmark.util :as util])
   (:import [com.google.common.io Files]))
+
+; ---------------------------------------- Stage definitions ---------------------------------------- 
+(defn- generate-upload-stage
+  [params state]
+  (let [tmp-dir (Files/createTempDir)
+        tmp-file (util/generate-file tmp-dir (:chunk-size params) (:chunk-count params))
+        tmp-crc (util/compute-crc32 (io/input-stream tmp-file))]
+    (assoc state :upload-file tmp-file :upload-crc tmp-crc)))
+
+(defn- upload-adapter-stage
+  "Adapter for stage API into upload fn API" 
+  [upload-fn params state]
+  (upload-fn (:creds params) (:bucket params) (:upload-file state))
+  ;; Destroy references to FS state going forward, but since every upload fn uses getName() output as key
+  ;; record that for future ops here.
+  (assoc (dissoc state :upload-file) :key (.getName (:upload-file state))))
+
+(defn- download-adapter-stage
+  "Adapter for stage API into download fn API"
+  [download-fn params state]
+  (let [tmp-dir (Files/createTempDir)
+        tmp-file (io/file tmp-dir (:key state))]
+    (download-fn (:creds params) (:bucket params) (:key state) tmp-dir)
+    (assoc state :download-crc (util/compute-crc32 (io/input-stream tmp-file)))))
+
+(defn- postprocess-stage
+  "Do a bit of calculation based on the current state"
+  [params state]
+  (let [file-size (* (:chunk-size params) (:chunk-count params))
+        file-size-mb (util/bytes->MB file-size)]
+    (cond-> state
+      (contains? state :upload-wall-time) (assoc :upload-mb-sec (with-precision 5 (/ file-size-mb (util/ms->s (:upload-wall-time state)))))
+      (contains? state :download-wall-time) (assoc :download-mb-sec (with-precision 5 (/ file-size-mb (util/ms->s (:download-wall-time state)))))
+      (and (contains? state :upload-crc) (contains? state :download-crc)) (assoc :crc-match (= (:upload-crc state) (:download-crc state))))))
 
 ; ---------------------------------------- Stage utilities ----------------------------------------
 (defn- timing-stage-decorator
@@ -28,32 +61,21 @@
           (log/info "Exception in test function " e)
           state)))))
 
-; ---------------------------------------- Stage definitions ---------------------------------------- 
-(defn- generate-upload-stage
-  [params state]
-  (log/info "Generating upload file, input state: " state)
-  (let [tmp-dir (Files/createTempDir)
-        tmp-file (util/generate-file tmp-dir (:chunk-size params) (:chunk-count params))
-        tmp-crc (util/compute-crc32 (io/input-stream tmp-file))]
-    (assoc state :upload-file tmp-file :upload-crc tmp-crc)))
+(defn- composed-upload-stage
+  "Return a function which represents the composed upload ops (file generation + upload) for a given set of params"
+  [params]
+  (let [generate-stage (partial generate-upload-stage params)
+        upload-fn (partial upload-adapter-stage (:upload-fn params) params)
+        upload-stage (timing-stage-decorator "upload" upload-fn)]
+    (comp upload-stage generate-stage)))
 
-(defn- upload-adapter-stage
-  "Adapter for stage API into upload fn API" 
-  [upload-fn params state]
-  (log/info "Uploading file, input state: " state)
-  (upload-fn (:creds params) (:bucket params) (:upload-file state))
-  ;; Destroy references to FS state going forward, but since every upload fn uses getName() output as key
-  ;; record that for future ops here.
-  (assoc (dissoc state :upload-file) :key (.getName (:upload-file state))))
-
-(defn- download-adapter-stage
-  "Adapter for stage API into download fn API"
-  [download-fn params state]
-  (log/info "Downloading file, input state: " state)
-  (let [tmp-dir (Files/createTempDir)
-        tmp-file (io/file tmp-dir (:key state))]
-    (download-fn (:creds params) (:bucket params) (:key state) tmp-dir)
-    (assoc state :download-crc (util/compute-crc32 (io/input-stream tmp-file)))))
+(defn- composed-download-stage
+  "Return a function which represents the composed upload ops (file generation + upload) for a given set of params"
+  [params]
+  (let [download-fn (partial download-adapter-stage (:download-fn params) params)
+        download-stage (timing-stage-decorator "download" download-fn)
+        postprocess (partial postprocess-stage params)]
+    (comp postprocess download-stage)))
 
 ; ---------------------------------------- Param handling ----------------------------------------
 (defn- build-lib-params
@@ -84,9 +106,6 @@
   (let [lib-params (build-lib-params lib-type) 
         size-params (build-size-params test-size)
         params (merge {:creds conf/default-creds :bucket conf/default-bucket} lib-params size-params)
-        generate-stage (partial generate-upload-stage params)
-        upload-fn (partial upload-adapter-stage (:upload-fn params) params)
-        upload-stage (timing-stage-decorator "upload" upload-fn)
-        download-fn (partial download-adapter-stage (:download-fn params) params)
-        download-stage (timing-stage-decorator "download" download-fn)]
-    (apply (comp download-stage upload-stage generate-stage) [{}])))
+        upload-stage (composed-upload-stage params)
+        download-stage (composed-download-stage params)]
+    (apply (comp download-stage upload-stage) [{}])))
