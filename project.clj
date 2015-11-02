@@ -6,7 +6,8 @@
 		 [arre.jclouds.provider/aws-s3 "1.8.0" :exclusions [org.apache.jclouds/jclouds-core]]
                  [org.clojure/tools.logging "0.3.1"]
                  [amazonica "0.3.33"]
-                 [clj-time "0.11.0"]]
+                 [clj-time "0.11.0"]
+                 [commons-io "2.4"]]
   :main s3-benchmark.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})

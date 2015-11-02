@@ -12,30 +12,11 @@
                               :metadata {:content-length (.length file-obj)}
                               :input-stream file-content))))
 
-(defn upload-file-nio
-  [credentials bucket file]
-  (let [path-obj (.toPath (io/as-file file))
-        open-option-array (make-array java.nio.file.OpenOption 1)
-        _ (aset open-option-array 0 java.nio.file.StandardOpenOption/READ)]
-    (with-open [file-content (java.nio.file.Files/newInputStream path-obj open-option-array)]
-      (put-object credentials :bucket-name bucket
-                              :key (.toString (.getFileName path-obj))
-                              :metadata {:content-length (java.nio.file.Files/size path-obj)}
-                              :input-stream file-content))))
-
 (defn download-file
   [credentials bucket k dest-dir]
-  (let [s3-object (get-object credentials :bucket-name bucket :key k)]
+  (let [s3-object (get-object credentials :bucket-name bucket :key k)
+        tmp-file (io/file dest-dir k)]
     (util/ensure-dir-exists dest-dir)
     (with-open [s3-object-stream (:object-content s3-object)]
-      (io/copy s3-object-stream (io/file dest-dir k)))))
-
-(defn download-file-nio
-  [credentials bucket k dest-dir]
-  (let [dest-file-path (.toPath (io/file dest-dir k))
-        copy-option-array (make-array java.nio.file.CopyOption 1)
-        _ (aset copy-option-array 0 java.nio.file.StandardCopyOption/REPLACE_EXISTING)
-        s3-object (get-object credentials :bucket-name bucket :key k)]
-    (util/ensure-dir-exists dest-dir)
-    (with-open [s3-object-stream (:object-content s3-object)]
-      (java.nio.file.Files/copy s3-object-stream dest-file-path copy-option-array))))
+      (io/copy s3-object-stream tmp-file))
+    (.length tmp-file)))

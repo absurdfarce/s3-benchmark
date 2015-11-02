@@ -28,9 +28,11 @@
 
 (defn download-file
   [credentials bucket k dest-dir]
-  (let [req (HttpGet. (format "http://%s.s3.amazonaws.com/%s" bucket k))]
+  (let [req (HttpGet. (format "http://%s.s3.amazonaws.com/%s" bucket k))
+        tmp-file (io/file dest-dir k)]
     (with-open [resp (.execute client req)]
       (let [entity-stream (-> resp
                               (.getEntity)
                               (.getContent))]
-        (io/copy entity-stream (io/file dest-dir k))))))
+        (io/copy entity-stream tmp-file)))
+    (.length tmp-file)))

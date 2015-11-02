@@ -8,40 +8,63 @@
             [s3-benchmark.httpclient :as httpclient]
             [s3-benchmark.jclouds :as jclouds]
             [s3-benchmark.util :as util])
-  (:import [com.google.common.io Files]))
+  (:import [com.google.common.io Files]
+           [org.apache.commons.io FileUtils]))
 
 ; ---------------------------------------- Stage definitions ---------------------------------------- 
 (defn- generate-upload-stage
   [params state]
   (let [tmp-dir (Files/createTempDir)
-        tmp-file (util/generate-file tmp-dir (:chunk-size params) (:chunk-count params))
-        tmp-crc (util/compute-crc32 (io/input-stream tmp-file))]
-    (assoc state :upload-file tmp-file :upload-crc tmp-crc)))
+        tmp-file (util/generate-file tmp-dir (:chunk-size params) (:chunk-count params))]
+    (assoc state
+           :upload-file tmp-file
+           :upload-crc (util/compute-crc32 (io/input-stream tmp-file))
+           :upload-size (.length tmp-file)
+           :upload-delete-fn #(FileUtils/deleteQuietly tmp-dir))))
 
 (defn- upload-adapter-stage
   "Adapter for stage API into upload fn API" 
   [upload-fn params state]
-  (upload-fn (:creds params) (:bucket params) (:upload-file state))
   ;; Destroy references to FS state going forward, but since every upload fn uses getName() output as key
   ;; record that for future ops here.
-  (assoc (dissoc state :upload-file) :key (.getName (:upload-file state))))
+  (let [base-state (dissoc state :upload-file :upload-delete-fn)]
+    (try
+      (upload-fn (:creds params) (:bucket params) (:upload-file state))
+      (assoc base-state :key (.getName (:upload-file state)))
+      (catch Exception e
+        (assoc base-state :upload-exception e))
+      (finally
+        (apply (:upload-delete-fn state) nil)))))
 
 (defn- download-adapter-stage
   "Adapter for stage API into download fn API"
   [download-fn params state]
   (let [tmp-dir (Files/createTempDir)
         tmp-file (io/file tmp-dir (:key state))]
-    (download-fn (:creds params) (:bucket params) (:key state) tmp-dir)
-    (assoc state :download-crc (util/compute-crc32 (io/input-stream tmp-file)))))
+    (try
+      (let [download-size (download-fn (:creds params) (:bucket params) (:key state) tmp-dir)]
+        (assoc state
+               :download-crc (util/compute-crc32 (io/input-stream tmp-file))
+               :download-size download-size))
+      (catch Exception e
+        (assoc state :download-exception e))
+      (finally
+        (FileUtils/deleteQuietly tmp-dir)))))
 
 (defn- postprocess-stage
   "Do a bit of calculation based on the current state"
   [params state]
-  (let [file-size (* (:chunk-size params) (:chunk-count params))
-        file-size-mb (util/bytes->MB file-size)]
+  (letfn [(compute-mb-sec [file-size-bytes wall-time-msec]
+            (let [file-size-mb (util/bytes->MB file-size-bytes)
+                  wall-time-sec (util/ms->s wall-time-msec)]
+              (with-precision 5 (/ file-size-mb wall-time-sec))))]
     (cond-> state
-      (contains? state :upload-wall-time) (assoc :upload-mb-sec (with-precision 5 (/ file-size-mb (util/ms->s (:upload-wall-time state)))))
-      (contains? state :download-wall-time) (assoc :download-mb-sec (with-precision 5 (/ file-size-mb (util/ms->s (:download-wall-time state)))))
+      (contains? state :upload-wall-time) (assoc :upload-mb-sec (compute-mb-sec
+                                                                 (* (:chunk-size params) (:chunk-count params))
+                                                                 (:upload-wall-time state)))
+      (contains? state :download-wall-time) (assoc :download-mb-sec (compute-mb-sec
+                                                                     (:download-size state)
+                                                                     (:download-wall-time state)))
       (and (contains? state :upload-crc) (contains? state :download-crc)) (assoc :crc-match (= (:upload-crc state) (:download-crc state))))))
 
 ; ---------------------------------------- Stage utilities ----------------------------------------
@@ -82,7 +105,6 @@
   [lib-type]
   (cond
     (= lib-type :amazonica) {:upload-fn amazonica/upload-file :download-fn amazonica/download-file}
-    (= lib-type :amazonica-nio) {:upload-fn amazonica/upload-file-nio :download-fn amazonica/download-file-nio}
     (= lib-type :jclouds) {:upload-fn jclouds/upload-file :download-fn jclouds/download-file}
     (= lib-type :httpclient) {:upload-fn httpclient/upload-file :download-fn httpclient/download-file}))
 
@@ -112,9 +134,8 @@
 
 (defn download-test
   "REPL function that runs a complete upload + download test"
-  [lib-type test-size k]
+  [lib-type k]
   (let [lib-params (build-lib-params lib-type) 
-        size-params (build-size-params test-size)
-        params (merge {:creds conf/default-creds :bucket conf/default-bucket} lib-params size-params)]
+        params (merge {:creds conf/default-creds :bucket conf/default-bucket} lib-params)]
     (apply (composed-download-stage params) [{:key k}])))
 
