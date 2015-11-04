@@ -62,10 +62,12 @@
       (contains? state :upload-wall-time) (assoc :upload-mb-sec (compute-mb-sec
                                                                  (* (:chunk-size params) (:chunk-count params))
                                                                  (:upload-wall-time state)))
-      (contains? state :download-wall-time) (assoc :download-mb-sec (compute-mb-sec
-                                                                     (:download-size state)
-                                                                     (:download-wall-time state)))
-      (and (contains? state :upload-crc) (contains? state :download-crc)) (assoc :crc-match (= (:upload-crc state) (:download-crc state))))))
+      (and (contains? state :download-wall-time)
+           (contains? state :download-size)) (assoc :download-mb-sec (compute-mb-sec
+                                                                      (:download-size state)
+                                                                      (:download-wall-time state)))
+      (and (contains? state :upload-crc)
+           (contains? state :download-crc)) (assoc :crc-match (= (:upload-crc state) (:download-crc state))))))
 
 ; ---------------------------------------- Stage utilities ----------------------------------------
 (defn- timing-stage-decorator
@@ -81,7 +83,7 @@
                (keyword (str name "-free-mem-delta")) (- (.freeMemory runtime) start-free-mem)
                (keyword (str name "-total-mem-delta")) (- (.totalMemory runtime) start-total-mem))
         (catch Exception e
-          (log/info "Exception in test function " e)
+          (log/info "Exception in test function" e)
           state)))))
 
 (defn- composed-upload-stage
@@ -133,9 +135,16 @@
     (apply (comp download-stage upload-stage) [{}])))
 
 (defn download-test
-  "REPL function that runs a complete upload + download test"
+  "REPL function that runs a complete download test"
   [lib-type k]
   (let [lib-params (build-lib-params lib-type) 
         params (merge {:creds conf/default-creds :bucket conf/default-bucket} lib-params)]
     (apply (composed-download-stage params) [{:key k}])))
+
+(defn download-only-test
+  "REPL function that runs only the download test (no postprocessing)"
+  [lib-type k]
+  (let [lib-params (build-lib-params lib-type) 
+        params (merge {:creds conf/default-creds :bucket conf/default-bucket} lib-params)]
+    (apply (partial download-adapter-stage (:download-fn params) params) [{:key k}])))
 
