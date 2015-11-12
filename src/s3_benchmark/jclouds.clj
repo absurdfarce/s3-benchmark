@@ -19,7 +19,7 @@
 (defn download-file
   [credentials bucket k dest-dir]
   (let [dest-dir-obj (io/as-file dest-dir)
-        aws-blobstore (blobstore2/blobstore "aws-s3" (:access-key credentials) (:secret-key credentials))
+        aws-blobstore (blobstore2/blobstore "aws-s3" (:access-key credentials) (:secret-key credentials) :apachehc)
         tmp-file (io/file dest-dir k)]
     (util/ensure-dir-exists dest-dir-obj)
     (with-open [s3-object-stream (blobstore2/get-blob-stream aws-blobstore bucket k)]
