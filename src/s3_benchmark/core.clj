@@ -8,8 +8,11 @@
             [s3-benchmark.httpclient :as httpclient]
             [s3-benchmark.jclouds :as jclouds]
             [s3-benchmark.util :as util])
-  (:import [com.google.common.io Files]
-           [org.apache.commons.io FileUtils]))
+  (:import [com.google.common.base Stopwatch]
+           [com.google.common.io Files]
+           [java.util.concurrent TimeUnit]
+           [org.apache.commons.io FileUtils])
+  (:gen-class))
 
 ; ---------------------------------------- Stage definitions ---------------------------------------- 
 (defn- generate-upload-stage
@@ -55,8 +58,8 @@
   "Do a bit of calculation based on the current state"
   [params state]
   (letfn [(compute-mb-sec [file-size-bytes wall-time-msec]
-            (let [file-size-mb (util/bytes->MB file-size-bytes)
-                  wall-time-sec (util/ms->s wall-time-msec)]
+            (let [file-size-mb (/ file-size-bytes 1000000M)
+                  wall-time-sec (/ wall-time-msec 1000M)]
               (with-precision 5 (/ file-size-mb wall-time-sec))))]
     (cond-> state
       (contains? state :upload-wall-time) (assoc :upload-mb-sec (compute-mb-sec
@@ -70,18 +73,26 @@
            (contains? state :download-crc)) (assoc :crc-match (= (:upload-crc state) (:download-crc state))))))
 
 ; ---------------------------------------- Stage utilities ----------------------------------------
+(defn- apply-with-stopwatch
+  [the-fn args]
+  (let [stopwatch (Stopwatch/createUnstarted)]
+    (.start stopwatch)
+    (let [rv (apply the-fn args)]
+      (.stop stopwatch)
+      [rv stopwatch])))
+
 (defn- timing-stage-decorator
   [name stage-fn]
   (fn [state]
-    (let [start-time (System/currentTimeMillis)
-          runtime (Runtime/getRuntime)
+    (let [runtime (Runtime/getRuntime)
           start-free-mem (.freeMemory runtime)
           start-total-mem (.totalMemory runtime)]
       (try
-        (assoc (apply stage-fn [state])
-               (keyword (str name "-wall-time")) (- (System/currentTimeMillis) start-time)
-               (keyword (str name "-free-mem-delta")) (- (.freeMemory runtime) start-free-mem)
-               (keyword (str name "-total-mem-delta")) (- (.totalMemory runtime) start-total-mem))
+        (let [[stage-state stopwatch] (apply-with-stopwatch stage-fn [state])]
+          (assoc stage-state
+                 (keyword (str name "-wall-time")) (.elapsed stopwatch TimeUnit/MILLISECONDS)
+                 (keyword (str name "-free-mem-delta")) (- (.freeMemory runtime) start-free-mem)
+                 (keyword (str name "-total-mem-delta")) (- (.totalMemory runtime) start-total-mem)))
         (catch Exception e
           (log/info "Exception in test function" e)
           state)))))
@@ -148,3 +159,7 @@
         params (merge {:creds conf/default-creds :bucket conf/default-bucket} lib-params)]
     (apply (partial download-adapter-stage (:download-fn params) params) [{:key k}])))
 
+(defn -main [& args]
+  (let [[lib-type key] args]
+    (println (format "Download test: lib %s, key %s" lib-type key))
+    (println (download-test (keyword lib-type) key))))
