@@ -75,11 +75,10 @@
 ; ---------------------------------------- Stage utilities ----------------------------------------
 (defn- apply-with-stopwatch
   [the-fn args]
-  (let [stopwatch (Stopwatch/createUnstarted)]
-    (.start stopwatch)
-    (let [rv (apply the-fn args)]
-      (.stop stopwatch)
-      [rv stopwatch])))
+  (let [stopwatch (Stopwatch/createStarted)
+        rv (apply the-fn args)]
+    (.stop stopwatch)
+    [rv stopwatch]))
 
 (defn- timing-stage-decorator
   [name stage-fn]
