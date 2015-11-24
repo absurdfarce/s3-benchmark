@@ -12,18 +12,21 @@
             [org.apache.http.protocol HttpProcessorBuilder]
             [org.apache.http.impl.client HttpClients]
             [org.apache.http.impl.conn DefaultProxyRoutePlanner]
+            [org.apache.http.util VersionInfo]
             [javax.crypto Mac]
             [javax.crypto.spec SecretKeySpec]
             [org.apache.commons.codec.binary Base64]))
 
-;; Use a custom HttpProcessor in order to avoid adding any extraneous headers... httpclient can be a bit
-;; aggresive on that front.
+;; Use a custom HttpProcessor in order to avoid adding any extraneous headers.  httpclient can be a bit
+;; aggresive on that front, and AWS authentication is based on headers included in the request... so
+;; we need to exercise strict control over which headers are and aren't used.
 (def client (-> (HttpClients/custom)
                 ;; In case you want to use a proxy
                 ;;(.setRoutePlanner (DefaultProxyRoutePlanner. (HttpHost. "localhost" 8080)))
-                (.setHttpProcessor (-> (HttpProcessorBuilder/create)
-                                       (.build)))
+                (.setHttpProcessor (-> (HttpProcessorBuilder/create) (.build)))
                 (.build)))
+
+(def user-agent (VersionInfo/getUserAgent "Apache-HttpClient" "org.apache.http.client" (class HttpClients)))
 
 (defn- build-authorization-string
   [verb bucket k date-str]
@@ -56,7 +59,8 @@
         req (doto (HttpGet. (format "http://%s.s3.amazonaws.com/%s" bucket k))
               (.setHeader HttpHeaders/HOST (format "%s.s3.amazonaws.com" bucket))
               (.setHeader HttpHeaders/DATE date-str)
-              (.setHeader HttpHeaders/AUTHORIZATION (build-authorization-string "GET" bucket k date-str)))
+              (.setHeader HttpHeaders/AUTHORIZATION (build-authorization-string "GET" bucket k date-str))
+              (.setHeader HttpHeaders/USER_AGENT user-agent))
         tmp-file (io/file dest-dir k)]
     (with-open [resp (.execute client req)]
       (let [entity-stream (-> resp
